@@ -1,0 +1,614 @@
+#!/bin/bash
+
+#############################################
+#############################################
+
+# Path to the script
+
+SCRIPTDIR=$(dirname $0)
+
+# Checks if the first argument is "init" argument, if not, script will fail. After that, we will export environment variables needed for this scrip.
+
+if [ "$1" != "init" ];then
+echo "ERROR	Please, provide -init- argument"
+exit 1
+else
+echo "Welcome to NLS utility! We we'll export variables needed for this script. It will take a 5 seconds "
+sleep 5
+. $SCRIPTDIR/env.sh 
+fi
+#############################################
+#############################################
+
+
+
+
+
+#############################################
+#############################################
+
+function init {
+
+# Executing first argument after init. Init is not providing any special functions, it is only used for making command more intutive.
+
+$1
+}
+#############################################
+#############################################
+
+
+
+
+
+#############################################
+#############################################
+
+function bamboo_user {
+
+# Create bamboo user. Bamboo user is essential for bamboo and bamboo-agent server. All configuration is stored under his home directory.
+
+echo "Creating bamboo user"
+sleep 5 
+
+adduser -d /home/bamboo -m bamboo
+}
+############################################
+############################################
+
+
+
+
+
+############################################
+############################################
+
+function subversion {
+
+# Install required .subversion folder. It is needed for Bamboo in order to authenticate to svn.
+
+echo "Installing .subersion directory"
+sleep 5
+cp -r $CONFDIR/.subversion $BAMBOOHOME/.subversion
+chown bamboo:bamboo -R $BAMBOOHOME/.subversion
+}
+############################################
+############################################
+
+
+
+
+
+############################################
+############################################
+function gradle {
+. $SCRIPTDIR/gradle.sh
+}
+#############################################
+#############################################
+
+
+
+
+
+#############################################
+#############################################
+function selinux {
+
+# Install selinux packages
+yum install -y policycoreutils policycoreutils-python selinux-policy selinux-policy-targeted libselinux-utils setroubleshoot-server setools setools-console mcstrans
+}
+#############################################
+#############################################
+
+
+
+
+
+#############################################
+#############################################
+function jdk {
+
+# Install jdk from bamboo-config backup directory
+
+echo "Installing jdk"
+sleep 5
+scp -r $CONFDIR/{jdk1.6.0_45,jdk1.7.0_67,jdk1.8.0_20,jdk1.8.0_101} /opt
+}
+#############################################
+#############################################
+
+
+
+
+
+#############################################
+#############################################
+function clover {
+
+# Install clover from bamboo-config backup directory  and re-create directory for clover cache
+
+echo "Installing clover and re-creating clover cache directory"
+sleep 5
+
+# Graphvz is needed for some Clover builds
+yum install graphviz -y
+
+scp -r $CONFDIR/clover-ant-4.0.1 /opt
+scp -r $CONFDIR/clover-ant-4.0.5 /opt
+mkdir -p /var/bamboo/clover
+chown bamboo:bamboo -R /var/bamboo
+}
+#############################################
+#############################################
+
+
+
+
+
+#############################################
+#############################################
+function ant {
+
+# Install ant
+
+echo "Installing ant"
+sleep 5
+scp -r $CONFDIR/{apache-ant-1.8.4,apache-ant-1.7.1,apache-ant-1.9.4} /opt/
+}
+#############################################
+#############################################
+
+
+
+
+
+#############################################
+#############################################
+function symlinks {
+
+# Create symbolic links for ant, clover and jdk
+
+echo "Create symbolic links for ant, clover and jdk"
+sleep 5
+ln -s /opt/apache-ant-1.7.1 /opt/apache-ant-1.7
+ln -s /opt/apache-ant-1.8.4 /opt/apache-ant-1.8
+ln -s /opt/apache-ant-1.9.4 /opt/apache-ant-1.9
+ln -s /opt/jdk1.6.0_45 /opt/jdk1.6.0
+ln -s /opt/jdk1.7.0_67 /opt/jdk1.7.0
+ln -s /opt/jdk1.8.0_20 /opt/jdk1.8.0
+#ln -s /opt/clover-ant-4.0.1 /opt/clover # Old clover 
+ln -s /opt/clover-ant-4.0.5 /opt/clover
+}
+##############################################
+##############################################
+
+
+
+
+
+##############################################
+##############################################
+function node {
+. $SCRIPTDIR/node.sh
+}
+###########################################
+###########################################
+
+
+
+
+###########################################
+###########################################
+function production_style {
+
+# Insert PRODUCTION prompt letters and sshd banner
+
+echo "sshd banner and prompt letters! Production style!"
+sleep 5
+cp $CONFDIR/prompt.sh /etc/profile.d
+. /etc/profile
+. ~/.bashrc
+cp $CONFDIR/banner /etc/ssh
+sed -i 's/#Banner none/Banner \/etc\/ssh\/banner/' /etc/ssh/sshd_config
+systemctl restart sshd
+. /etc/profile
+}
+###########################################
+###########################################
+
+
+
+
+###########################################
+###########################################
+function bamboo-agent-dependencies {
+
+# Everything that is BAMBOO specific
+
+# Epel release 
+
+yum install epel-release -y
+
+# Needed for qemu agent
+
+yum install qemu-kvm qemu-img virt-manager libvirt libvirt-python libvirt-client virt-install virt-viewer qemu-system-x86 -y
+yum install make -y
+
+# Needed for AWS EC2
+
+yum install jq -y
+yum install awscli -y
+
+
+# Needed for 32bits Builds
+
+yum -y install glibc-devel.i686 glibc-devel ibstdc++-devel.i686 systemd-devel.i686
+
+# For QStack
+# Required epel
+
+yum install sshpass -y
+
+# For headless testing
+
+#yum install chromedriver -y
+#yum install xorg-x11-server-Xvfb-1.17.2-22.el7.x86_64 -y
+
+
+# Add necessery mount points
+yum install nfs-utils cifs-utils -y
+echo "jekyll          -rw,soft,intr,rsize=8192,wsize=8192 saas.betware.com:/var/jekyll" >> /etc/auto.misc
+echo "logixml-test  -fstype=cifs,rw,noperm,credentials=/root/.config/.secret ://logixml-test.betware.com/applications" >> /etc/auto.misc
+#echo "btaf-reports  -fstype=cifs,rw,noperm,credentials=/root/.config/.btaf-secret: //btaf.betware.com/BambooReports" >> /etc/auto.misc
+
+# Need fix:x
+#mkdir /root/.config
+#cp -r  $CONFDIR/.secret $CONFDIR/.btaf-secret /root/.config
+#systemctl restart autofs
+
+
+# HAL builds
+yum install pcsc-lite-devel-1.8.8-6.el7.x86_64 pcsc-lite pcsc-lite-devel-1.8.8-6.el7.i686 -y
+}
+###########################################
+###########################################
+
+
+
+
+
+###########################################
+###########################################
+function docker {
+$SCRIPTDIR/docker.sh
+}
+###########################################
+###########################################
+
+
+
+
+
+###########################################
+###########################################
+function ruby {
+
+# Install Ruby and rubygem. With root user !
+
+echo "Install ruby and rubygems"
+sleep 5
+yum install ruby -y
+yum install ruby-devel -y
+
+# Install Ruby dependencies 
+
+echo "Installing compas and bundler"
+gem install compass 
+gem install bundler 
+gem install bootstrap-sass 
+gem install sass
+gem install sass-globbing
+}
+###########################################
+###########################################
+
+
+
+
+
+###########################################
+###########################################
+function betwarebuilds {
+
+# Create betwarebuilds directory and every other needed folder for Bamboo. You will need to append bamboo_rsa with bamboo PRIVATE key
+
+# Generate new keys!
+
+mkdir /opt/betwarebuilds
+mkdir /opt/betwarebuilds/keys
+ln -s /opt/betwarebuilds /betwarebuilds
+touch /opt/betwarebuilds/keys/bamboo_rsa
+chown bamboo:bamboo -R /opt/betwarebuilds/keys
+}
+###########################################
+###########################################
+
+
+
+
+
+###########################################
+###########################################
+function domain_join {
+
+# Joing linux computer to novomaticls domain
+
+echo "Domain join"
+sleep 5
+
+# Update and Install necessery packages
+yum install realmd samba samba-common oddjob oddjobmkhomedir sssd adcli vim net-tools -y
+
+systemctl enable smb
+systemctl start smb
+
+systemctl enable sssd
+
+realm join --user=bjonoskiadmin@betware.com  betware.com
+
+
+/usr/bin/cp -f /etc/samba/smb.conf /etc/samba/smb.conf.backup
+
+
+/usr/bin/cat > /etc/samba/smb.conf << 'EOF'
+
+[global]
+workgroup = betware.com
+server string = Samba Server Version %v
+max log size = 50
+passdb backend = tdbsam
+log file = /var/log/samba/log.%m
+security = ads
+encrypt passwords = yes
+realm = betware.com
+printing = bsd
+printcap name = /dev/null
+EOF
+
+if ! [ -d /etc/sssd ];then
+mkdir /etc/sssd > /dev/null 2>$1 
+fi
+
+/usr/bin/cat > /etc/sssd/sssd.conf << 'EOF'
+
+
+[sssd]
+domains = betware.com
+config_file_version = 2
+services = nss, pam
+default_domain_suffix = betware.com
+
+[domain/betware.com]
+ad_domain = betware.com
+krb5_realm = BETWARE.COM
+realmd_tags = manages-system joined-with-adcli
+cache_credentials = True
+id_provider = ad
+krb5_store_password_if_offline = True
+default_shell = /bin/bash
+ldap_id_mapping = True
+use_fully_qualified_names = True
+fallback_homedir = /home/%d/%u
+access_provider = ad
+
+EOF
+
+chmod 600 /etc/sssd/sssd.conf
+
+systemctl restart sssd
+systemctl restart smb
+
+echo "%unixadminserver@betware.com    ALL=(ALL)       ALL" >> /etc/sudoers
+realm permit -g unixadminserver@betware.com
+}
+###########################################
+###########################################
+
+
+
+
+
+###########################################
+###########################################
+function autofs {
+
+# Autofs functionality for Centos 7
+#for centos 6.x
+#CENTOSVER=``
+
+# Installing nfs-server, utils needed for autfs etc.
+yum install autofs nfs-utils -y
+#yum install libsss_autofs
+
+
+echo "backup        -rw,soft,intr,rsize=8192,wsize=8192 backup-1.betware.com:/backup" >> /etc/auto.misc
+echo "atbes01       -rw,soft,intr,rsize=8192,wsize=8192 atbes01.betware.com:/atbackup" >> /etc/auto.misc
+
+systemctl enable autofs.service
+systemctl start autofs.service
+systemctl start rpc-statd.service
+systemctl start rpcbind.service
+}
+###########################################
+###########################################
+
+
+
+
+
+###########################################
+###########################################
+function android {
+
+# Copy over whole android folder. Need more testing if copy-paste directory if enough.
+
+echo "Copy android folder"
+sleep 5
+
+#cp -r $CONFDIR/android /var/
+#chown bamboo:bamboo -R /var/android
+
+# Update android sdk to latest edition 
+/var/android/android-sdk-linux/tools/android update sdk -u
+
+# Export ANDROID HOME and PATH
+touch /etc/profile.d/android.sh
+
+echo 'export ANDROID_HOME=/var/android/android-sdk-linux' > /etc/profile.d/android.sh
+echo 'export PATH=$ANDROID_HOME/tools:$PATH' >> /etc/profile.d/android.sh
+
+. /etc/profile
+
+# Install necesarry libraries
+
+yum -y install libgcc_s.so.1
+yum -y install zlib.i686
+yum -y install glibc.i686
+
+# DESCRIPTION
+
+# When using android utility, keep in mind that android command is designed for GUI and it might throw error if "-no-ui" or "-u" parameters are not supplied.
+}
+###########################################
+###########################################
+
+
+
+
+
+###########################################
+###########################################
+function oracle_bamboo {
+
+# Copy oracle libraries needed for bamboo
+
+echo "Exporting oracle and LD LIBRARY PATH"
+sleep 5 
+
+#DESCRIPTION
+
+#LD_LIBRARY_PATH: native code libraries (on Linux, in addition to the value of this variable, the lookup path typically contains /usr/local/lib, /usr/lib, /lib and a few others). The name LD comes from dynamic loader, the system component that loads libraries into dynamically linked executable.
+
+echo 'export ORACLE_HOME=/usr/lib/oracle/12.1/client64' > /etc/profile.d/oracle.sh
+echo 'export LD_LIBRARY_HOME=/usr/lib/oracle/12.1/client64/lib' >> /etc/profile.d/oracle.sh
+echo 'export PATH=$ORACLE_HOME/bin:$PATH' >> /etc/profile.d/oracle.sh
+
+
+. /etc/profile.d/oracle.sh
+
+echo "Export finished"
+
+# Installing oracle libraries from rpm
+
+echo "Start oracle library installation"
+sleep 5
+rpm -Uvh $CONFDIR/oracle-i*
+cp $CONFDIR/network /usr/lib/oracle/12.1/client64
+}
+###########################################
+###########################################
+
+
+
+
+
+###########################################
+###########################################
+function httpd {
+. $SCRIPTDIR/httpd.sh
+}
+###########################################
+###########################################
+
+
+
+
+
+###########################################
+###########################################
+function sslpoke {
+echo "Enter the hostname"
+read dnsname
+cd $HOMEDIR
+java SSLPoke $dnsname 443
+}
+###########################################
+###########################################
+
+
+
+###########################################
+###########################################
+function psql {
+
+# Install Development Tool
+
+#yum groupinstall "Development Tools" -y
+
+# Add PosgteSQL 9.5 yum repo
+
+rpm -Uvh http://yum.postgresql.org/9.5/redhat/rhel-7-x86_64/pgdg-centos95-9.5-2.noarch.rpm
+
+# Install PosgreSQL 9.5
+
+yum install postgresql95-server postgresql95 -y
+
+# Initialize database
+
+/usr/pgsql-9.5/bin/postgresql95-setup initdb
+
+# Enable postgresql
+
+systemctl enable postgresql-9.5
+systemctl start postgresql-9.5
+
+# Open postgresql
+
+echo "Open postgesql through firewalld"
+sleep 4
+firewall-cmd --permanent --zone=public --add-service=postgresql
+firewall-cmd --reload
+
+# Append custom aliases
+echo -e "\n# Adding custom pgsql aliases" >> ~/.bashrc
+echo "alias pg='cd /var/lib/pgsql/9.5/data'" >> ~/.bashrc
+echo "alias pg_reload='su - postgres -c "/usr/pgsql-9.5/bin/pg_ctl reload"'" >> ~/.bashrc
+echo "alias pg_log='tail -f /var/lib/pgsql/9.5/data/pg_log/*`date +%a`*'" >> ~/.bashrc
+. ~/.bashrc
+}
+###########################################
+###########################################
+
+
+
+
+
+###########################################
+###########################################
+function follow {
+. $SCRIPTDIR/tail-atlassian.sh
+}
+###########################################
+###########################################
+
+
+
+
+
+###########################################
+###########################################
+# Calls arguments verbatim
+$@
+###########################################
+###########################################
+
